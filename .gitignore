@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.test-output/
+
+scan.json
+contact-sheet.png
+analysis.json
+game-store-moodboard.png
+game-store-moodboard.html
+
+.DS_Store
+Thumbs.db
