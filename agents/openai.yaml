@@ -1,8 +1,8 @@
 interface:
   display_name: "游戏商店图视觉分析"
-  short_description: "分析游戏商店截图并生成配色、版式、情绪与风格规范图"
+  short_description: "分析商店图定位并输出文字报告与高清情绪板"
   brand_color: "#B425A5"
-  default_prompt: "使用 $game-store-visual-moodboard 分析这组游戏商店图，并生成带色值与区域拆解的高清情绪板。"
+  default_prompt: "使用 $game-store-visual-moodboard 分析这组游戏商店图，先给出情绪板定位与描述，再输出文字分析和带色值、区域拆解的高清情绪板图片。"
 
 policy:
   allow_implicit_invocation: true

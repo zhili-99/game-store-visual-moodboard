@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scan game-store images and render a reusable visual moodboard.
+"""Scan game-store images and render a text analysis plus visual moodboard.
 
 Requires Python 3.9+ and Pillow. The script is intentionally deterministic:
 automatic scanning supplies evidence; semantic labels come from analysis JSON.
@@ -296,10 +296,16 @@ class MoodboardRenderer:
         }
 
     def validate(self) -> None:
-        required = ["title", "subtitle", "representatives", "palette", "zones", "rules", "formula"]
+        required = ["title", "subtitle", "positioning", "representatives", "palette", "zones", "rules", "formula"]
         missing = [key for key in required if key not in self.a]
         if missing:
             raise ValueError("analysis.json missing required keys: " + ", ".join(missing))
+        positioning = self.a["positioning"]
+        if not isinstance(positioning, dict):
+            raise ValueError("analysis.json positioning must be an object")
+        positioning_missing = [key for key in ("statement", "description") if not positioning.get(key)]
+        if positioning_missing:
+            raise ValueError("analysis.json positioning missing required keys: " + ", ".join(positioning_missing))
         images = self.scan.get("unique_images", [])
         for representative in self.a["representatives"]:
             index = int(representative["source_index"])
@@ -328,7 +334,8 @@ class MoodboardRenderer:
         rule_rows = math.ceil(len(self.a.get("rules", [])) / 3)
         bottom_h = max(560, 190 + rule_rows * 135)
         header_h = 112
-        height = self.margin + header_h + top_h + self.gap + bottom_h + self.margin
+        positioning_h = 218
+        height = self.margin + header_h + positioning_h + self.gap + top_h + self.gap + bottom_h + self.margin
         canvas = Image.new("RGB", (self.width, height), BG)
         draw = ImageDraw.Draw(canvas)
 
@@ -338,7 +345,39 @@ class MoodboardRenderer:
         subtitle = self.a.get("subtitle", "")
         draw_wrapped(draw, (760, 52), subtitle, self.fonts["body"], MUTED, self.width - 760 - self.margin, max_lines=2)
 
-        top_y = self.margin + header_h
+        # Positioning and description
+        positioning = self.a["positioning"]
+        positioning_y = self.margin + header_h
+        positioning_box = (self.margin, positioning_y, self.width - self.margin, positioning_y + positioning_h)
+        px1, py1, px2, py2 = self.card(draw, positioning_box, "情绪板定位与描述")
+        meta_w = 450
+        copy_w = px2 - px1 - meta_w - 32
+        statement = positioning.get("statement", "")
+        statement_bottom = draw_wrapped(draw, (px1, py1), statement, self.fonts["h3"], TEXT, copy_w, max_lines=2)
+        draw_wrapped(
+            draw,
+            (px1, statement_bottom + 12),
+            positioning.get("description", ""),
+            self.fonts["body"],
+            MUTED,
+            copy_w,
+            max_lines=4,
+        )
+        meta_x = px2 - meta_w
+        meta_y = py1
+        meta_items = [
+            ("品类定位", positioning.get("category", "")),
+            ("受众感受", positioning.get("audience", "")),
+            ("核心情绪", positioning.get("emotional_goal", "")),
+            ("视觉承诺", positioning.get("visual_promise", "")),
+        ]
+        for label, value in meta_items:
+            if not value:
+                continue
+            draw.text((meta_x, meta_y), label, font=self.fonts["small_bold"], fill=ACCENT)
+            meta_y = draw_wrapped(draw, (meta_x + 76, meta_y), str(value), self.fonts["small"], TEXT, meta_w - 76, max_lines=2) + 8
+
+        top_y = positioning_y + positioning_h + self.gap
         left_box = (self.margin, top_y, self.margin + left_w, top_y + top_h)
         right_box = (self.margin + left_w + self.gap, top_y, self.width - self.margin, top_y + top_h)
 
@@ -501,6 +540,80 @@ def write_html_wrapper(png_path: Path, html_path: Path, title: str) -> None:
     html_path.write_text(document, encoding="utf-8")
 
 
+def markdown_cell(value: Any) -> str:
+    return str(value or "").replace("|", "\\|").replace("\n", " ")
+
+
+def write_text_analysis(scan: dict[str, Any], analysis: dict[str, Any], report_path: Path) -> None:
+    positioning = analysis.get("positioning", {})
+    sample_note = analysis.get("sample_note") or (
+        f"{scan.get('file_count', 0)} 个文件，去重后 {scan.get('unique_count', 0)} 张有效样本"
+    )
+    lines = [
+        f"# {analysis.get('title', '游戏商店图视觉分析')}",
+        "",
+        f"> {analysis.get('subtitle', '')}",
+        "",
+        "## 1. 情绪板定位",
+        "",
+        f"**定位结论：** {positioning.get('statement', '')}",
+        "",
+        positioning.get("description", ""),
+        "",
+    ]
+    positioning_rows = [
+        ("品类定位", positioning.get("category", "")),
+        ("目标受众感受", positioning.get("audience", "")),
+        ("核心情绪", positioning.get("emotional_goal", "")),
+        ("视觉承诺", positioning.get("visual_promise", "")),
+    ]
+    for label, value in positioning_rows:
+        if value:
+            lines.append(f"- **{label}：** {value}")
+    lines.extend(["", "## 2. 样本与视觉路线", "", f"- **样本范围：** {sample_note}"])
+    keywords = "、".join(str(item) for item in analysis.get("mood_keywords", []))
+    if keywords:
+        lines.append(f"- **情绪关键词：** {keywords}")
+    for lane in analysis.get("lanes", []):
+        lines.append(f"- **{lane.get('name', '视觉路线')}：** {lane.get('description', '')}")
+
+    lines.extend(["", "## 3. 配色分析", "", "| 色彩 | 色值 | 角色与用途 | 占比 |", "| --- | --- | --- | --- |"])
+    for item in analysis.get("palette", []):
+        lines.append(
+            f"| {markdown_cell(item.get('name'))} | `{markdown_cell(item.get('hex'))}` | "
+            f"{markdown_cell(item.get('usage'))} | {markdown_cell(item.get('share'))} |"
+        )
+
+    lines.extend(["", "## 4. 画面区域", "", "| 区域 | 范围 | 作用 |", "| --- | --- | --- |"])
+    for zone in analysis.get("zones", []):
+        lines.append(
+            f"| {markdown_cell(zone.get('name'))} | {markdown_cell(zone.get('range'))} | "
+            f"{markdown_cell(zone.get('description'))} |"
+        )
+
+    lines.extend(["", "## 5. 风格语法", ""])
+    for rule in analysis.get("rules", []):
+        lines.append(f"- **{rule.get('name', '规则')}：** {rule.get('description', '')}")
+
+    formula = " + ".join(str(item) for item in analysis.get("formula", []))
+    result = analysis.get("formula_result", "可复用的商店图视觉事件")
+    lines.extend(
+        [
+            "",
+            "## 6. 可复用视觉公式",
+            "",
+            f"`{formula}` → **{result}**",
+            "",
+            "## 7. 最终结论",
+            "",
+            analysis.get("conclusion", positioning.get("statement", "")),
+            "",
+        ]
+    )
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def command_render(args: argparse.Namespace) -> int:
     scan = json.loads(Path(args.scan).read_text(encoding="utf-8-sig"))
     analysis = json.loads(Path(args.analysis).read_text(encoding="utf-8-sig"))
@@ -511,6 +624,10 @@ def command_render(args: argparse.Namespace) -> int:
     image.save(output, "PNG", optimize=True)
     if args.html:
         write_html_wrapper(output, Path(args.html).resolve(), analysis.get("title", "Game Store Visual Moodboard"))
+    if args.report:
+        report = Path(args.report).resolve()
+        write_text_analysis(scan, analysis, report)
+        print(report)
     print(output)
     return 0
 
@@ -531,6 +648,7 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--scan", required=True, help="Scan JSON from the scan command")
     render.add_argument("--analysis", required=True, help="Semantic analysis JSON")
     render.add_argument("--out", required=True, help="Output PNG")
+    render.add_argument("--report", help="Output Markdown text analysis")
     render.add_argument("--html", help="Optional standalone HTML wrapper")
     render.add_argument("--font", help="Optional TTF/TTC font")
     render.set_defaults(func=command_render)

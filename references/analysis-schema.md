@@ -8,6 +8,14 @@ Use UTF-8 JSON. Text fields may be Chinese or English. Paths in `representatives
 {
   "title": "Top Tycoon 商店图情绪板与配色区域",
   "subtitle": "玩具沙盘经营 × 主题乐园刺激 × 失控喜剧 × 金币暴富感",
+  "positioning": {
+    "category": "轻度模拟经营 × Tycoon 爽感表达",
+    "statement": "把复杂经营包装成一眼可懂、即时回报的玩具沙盘狂欢",
+    "description": "商店图不强调严肃经营深度，而是用巨大主体、夸张事件和密集奖励，把建造与扩张转译成轻松、亢奋、可立即获得满足的视觉体验。",
+    "audience": "喜欢轻操作、强反馈、快速成长的泛休闲经营用户",
+    "emotional_goal": "先感到欢乐与失控，再期待富足和扩张",
+    "visual_promise": "每张图都承诺一个清晰动作和一个可见奖励"
+  },
   "mood_keywords": ["欢乐", "亢奋", "富足", "轻喜剧"],
   "sample_note": "24 个文件，SHA-256 去重后 8 张有效样本",
   "representatives": [
@@ -57,6 +65,7 @@ Use UTF-8 JSON. Text fields may be Chinese or English. Paths in `representatives
 ## Field guidance
 
 - `representatives`: 4–12 entries. Use `source_index` from `scan.json`; do not duplicate the same image.
+- `positioning`: required. `statement` gives the one-sentence positioning conclusion; `description` explains how the images create that positioning. `category`, `audience`, `emotional_goal`, and `visual_promise` provide the compact labels shown in the image and text report.
 - `lanes`: 1–3 entries. Add multiple lanes only when the samples materially differ in camera, rendering, or communication goal.
 - `palette`: 6–10 tokens. Merge near-identical clusters and assign a semantic role.
 - `text`: `light` or `dark`, controlling swatch and zone label contrast.
